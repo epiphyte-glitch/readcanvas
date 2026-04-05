@@ -31,8 +31,13 @@ export function useAutoSave(documentId, { nodes, connections, offset, zoom, hist
   // Save workspace on changes
   useEffect(() => {
     if (!documentId || !saverRef.current) return;
+    // Strip pdfData from nodes — it's large binary data stored separately
+    // in the 'files' IndexedDB store and re-attached on load.
+    const sanitizedNodes = nodes.map(n =>
+      n.pdfData ? { ...n, pdfData: undefined } : n
+    );
     saverRef.current(documentId, {
-      nodes,
+      nodes: sanitizedNodes,
       connections,
       viewOffset: offset,
       viewZoom: zoom,

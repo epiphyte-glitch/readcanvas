@@ -148,18 +148,31 @@ export default function App() {
       // Load workspace (nodes, connections, view state)
       const workspace = await getWorkspace(doc.id);
       if (workspace) {
-        setNodes(workspace.nodes || []);
+        // Re-attach pdfData to any pdf-viewer nodes (stripped before save)
+        const restoredNodes = (workspace.nodes || []).map(n =>
+          n.type === 'pdf-viewer' && fileData ? { ...n, pdfData: fileData } : n
+        );
+        setNodes(restoredNodes);
         setConnections(workspace.connections || []);
         if (workspace.viewOffset) canvas.setOffset(workspace.viewOffset);
         if (workspace.viewZoom) canvas.setZoom(workspace.viewZoom);
       } else {
-        // No workspace yet — create default text panel
-        const firstPage = doc.pages?.[0];
-        setNodes([{
-          id: 'main-text', type: 'text-panel',
-          x: 100, y: 60, width: 580,
-          content: firstPage?.text || '',
-        }]);
+        // No workspace yet — create default node based on document type
+        if (doc.hasPdf && fileData) {
+          setNodes([{
+            id: 'main-pdf', type: 'pdf-viewer',
+            x: 100, y: 60, width: 720,
+            filename: doc.name,
+            pdfData: fileData,
+          }]);
+        } else {
+          const firstPage = doc.pages?.[0];
+          setNodes([{
+            id: 'main-text', type: 'text-panel',
+            x: 100, y: 60, width: 580,
+            content: firstPage?.text || '',
+          }]);
+        }
         setConnections([]);
         canvas.resetView();
       }

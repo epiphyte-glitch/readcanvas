@@ -29,7 +29,9 @@ export default function PdfViewerCard({ node, currentPage, totalPages, onPageCha
           await pdfDocRef.current.destroy();
           pdfDocRef.current = null;
         }
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(node.pdfData) }).promise;
+        // Slice to pass a copy — pdf.js transfers the buffer to its worker,
+        // which would detach the original stored in React state.
+        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(node.pdfData.slice(0)) }).promise;
         if (cancelled) { doc.destroy(); return; }
         pdfDocRef.current = doc;
         renderPage(doc, currentPage);

@@ -12,7 +12,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
  */
 export async function getPdfPageCount(file) {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+  // Pass a *copy* to pdf.js — getDocument transfers the buffer to the worker,
+  // detaching the original. We keep the original for storage.
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) }).promise;
   const totalPages = pdf.numPages;
   await pdf.destroy();
   return { totalPages, arrayBuffer };
