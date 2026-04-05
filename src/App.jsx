@@ -106,6 +106,15 @@ export default function App() {
     return cleanup;
   }, [nodes, connections]);
 
+  // Attach wheel listener as non-passive so preventDefault works.
+  // React 19 registers onWheel as passive by default, which blocks it.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', canvas.handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', canvas.handleWheel);
+  }, [canvas.handleWheel]);
+
   // ─── Seed demo document on first run ──────────────────────────
   useEffect(() => {
     (async () => {
@@ -491,7 +500,6 @@ export default function App() {
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={canvas.endInteraction}
           onMouseLeave={canvas.endInteraction}
-          onWheel={canvas.handleWheel}
           style={{
             flex: 1,
             background: colors.canvasBg,

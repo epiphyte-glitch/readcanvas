@@ -76,7 +76,9 @@ export default function PdfViewerCard({ node, currentPage, totalPages, onPageCha
       canvas.style.height = `${viewport.height}px`;
 
       const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
+      // setTransform resets any previous scaling before applying the new one,
+      // preventing transform accumulation across page changes.
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const task = page.render({ canvasContext: ctx, viewport });
       renderTaskRef.current = task;
