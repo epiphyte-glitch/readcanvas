@@ -5,10 +5,11 @@ import { useReadingHistory } from './hooks/useReadingHistory';
 import { useAutoSave } from './hooks/useAutoSave';
 import {
   saveDocument, getDocument, getWorkspace, getHistory,
-  setMeta, getMeta, makeDocumentId,
+  setMeta, getMeta, makeDocumentId, saveFile, getFile,
 } from './utils/storage';
 import Toolbar from './components/Toolbar';
 import TextPanel from './components/TextPanel';
+import PdfViewerCard from './components/PdfViewerCard';
 import FootnoteCard from './components/FootnoteCard';
 import AnnotationCard from './components/AnnotationCard';
 import ImageCard from './components/ImageCard';
@@ -57,6 +58,8 @@ export default function App() {
   const [footnotes, setFootnotes] = useState(DEMO_FOOTNOTES);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [pdfData, setPdfData] = useState(null);       // raw ArrayBuffer for PDF rendering
+  const [extracting, setExtracting] = useState(false); // text extraction in progress
 
   // Canvas nodes and connections
   const [nodes, setNodes] = useState([
@@ -161,6 +164,10 @@ export default function App() {
         canvas.resetView();
       }
 
+      // Load raw PDF binary if this document has one
+      const fileData = await getFile(doc.id);
+      setPdfData(fileData || null);
+
       // Load history
       const historyEntries = await getHistory(doc.id);
       loadHistory(historyEntries);
@@ -174,7 +181,8 @@ export default function App() {
 
   // ─── Handle new file upload ───────────────────────────────────
   const handleFileLoaded = useCallback(async (data) => {
-    const docId = makeDocumentId(data.filename, data.text.length);
+    const sizeKey = data.pdfData ? data.pdfData.byteLength : data.text.length;
+    const docId = makeDocumentId(data.filename, sizeKey);
 
     const doc = {
       id: docId,
@@ -182,10 +190,12 @@ export default function App() {
       pages: data.pages,
       footnotes: data.footnotes,
       totalPages: data.totalPages,
+      hasPdf: !!data.pdfData,
     };
 
     try {
       await saveDocument(doc);
+      if (data.pdfData) await saveFile(docId, data.pdfData);
       await setMeta('lastDocumentId', docId);
     } catch (err) {
       console.warn('Failed to save document:', err);
@@ -197,13 +207,26 @@ export default function App() {
     setFootnotes(data.footnotes);
     setTotalPages(data.totalPages);
     setCurrentPage(1);
+    setPdfData(data.pdfData || null);
 
-    const firstPage = data.pages[0];
-    setNodes([{
-      id: 'main-text', type: 'text-panel',
-      x: 100, y: 60, width: 580,
-      content: firstPage?.text || '',
-    }]);
+    if (data.pdfData) {
+      // PDF: show the rendered PDF on the canvas
+      setNodes([{
+        id: 'main-pdf', type: 'pdf-viewer',
+        x: 100, y: 60, width: 720,
+        filename: data.filename,
+        pdfData: data.pdfData,
+      }]);
+    } else {
+      // EPUB / text: show extracted text panel
+      const firstPage = data.pages[0];
+      setNodes([{
+        id: 'main-text', type: 'text-panel',
+        x: 100, y: 60, width: 580,
+        content: firstPage?.text || '',
+      }]);
+    }
+
     setConnections([]);
     canvas.resetView();
 
@@ -217,14 +240,65 @@ export default function App() {
   // ─── Page navigation ──────────────────────────────────────────
   const handlePageChange = useCallback((page) => {
     setCurrentPage(page);
+    // Update text panel content if present
     const pageData = pages.find(p => p.pageNumber === page);
     if (pageData) {
       setNodes(prev => prev.map(n =>
         n.id === 'main-text' ? { ...n, content: pageData.text } : n
       ));
-      addEntry({ type: 'page-changed', page });
     }
+    addEntry({ type: 'page-changed', page });
   }, [pages, addEntry]);
+
+  // ─── Extract text from current PDF ────────────────────────────
+  const handleExtractText = useCallback(async () => {
+    if (!pdfData || extracting) return;
+    setExtracting(true);
+
+    try {
+      const { extractPdfText, flattenPages, collectFootnotes } = await import('./utils/pdf.js');
+
+      // Build a File-like object from the stored ArrayBuffer
+      const blob = new Blob([pdfData], { type: 'application/pdf' });
+      const file = new File([blob], documentName);
+
+      const result = await extractPdfText(file);
+      const text = flattenPages(result.pages);
+      const newFootnotes = collectFootnotes(result.pages);
+
+      setPages(result.pages);
+      setFootnotes(newFootnotes);
+
+      // Persist extracted text
+      await saveDocument({
+        id: documentId,
+        name: documentName,
+        pages: result.pages,
+        footnotes: newFootnotes,
+        totalPages: result.totalPages,
+        hasPdf: true,
+      });
+
+      // Add a text panel to the canvas if one doesn't exist yet
+      setNodes(prev => {
+        if (prev.find(n => n.id === 'main-text')) return prev;
+        const pdfNode = prev.find(n => n.id === 'main-pdf');
+        return [...prev, {
+          id: 'main-text', type: 'text-panel',
+          x: (pdfNode?.x ?? 100) + (pdfNode?.width ?? 720) + 40,
+          y: pdfNode?.y ?? 60,
+          width: 580,
+          content: result.pages[0]?.text || text,
+        }];
+      });
+
+      addEntry({ type: 'text-extracted', filename: documentName });
+    } catch (err) {
+      console.warn('Text extraction failed:', err);
+    } finally {
+      setExtracting(false);
+    }
+  }, [pdfData, extracting, documentId, documentName, addEntry]);
 
   // ─── Footnote click ───────────────────────────────────────────
   const handleFootnoteClick = useCallback((num, e) => {
@@ -382,6 +456,8 @@ export default function App() {
         onToggleHistory={() => setShowHistory(!showHistory)}
         onBackToLibrary={() => setView('library')}
         onResetView={canvas.resetView}
+        onExtractText={pdfData ? handleExtractText : null}
+        extracting={extracting}
         annotationMode={annotationMode}
         connectingMode={!!connectingFrom}
         showHistory={showHistory}
@@ -426,6 +502,17 @@ export default function App() {
 
             {nodes.map(node => {
               switch (node.type) {
+                case 'pdf-viewer':
+                  return (
+                    <PdfViewerCard
+                      key={node.id}
+                      node={node}
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={handlePageChange}
+                      onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                    />
+                  );
                 case 'text-panel':
                   return (
                     <TextPanel

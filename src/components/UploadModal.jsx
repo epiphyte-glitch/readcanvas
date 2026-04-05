@@ -25,22 +25,17 @@ export default function UploadModal({ onClose, onFileLoaded, file: initialFile }
 
     try {
       if (file.type === 'application/pdf') {
-        // Dynamic import so the module loads lazily
-        const { extractPdfText, flattenPages, collectFootnotes } = await import('../utils/pdf.js');
-
-        const result = await extractPdfText(file, ({ current, total }) => {
-          setProgress({ current, total });
-        });
-
-        const text = flattenPages(result.pages);
-        const footnotes = collectFootnotes(result.pages);
+        // Just read page count — text extraction happens on demand via toolbar
+        const { getPdfPageCount } = await import('../utils/pdf.js');
+        const { totalPages, arrayBuffer } = await getPdfPageCount(file);
 
         onFileLoaded({
           filename: file.name,
-          text,
-          footnotes,
-          pages: result.pages,
-          totalPages: result.totalPages,
+          text: '',
+          footnotes: {},
+          pages: [],
+          totalPages,
+          pdfData: arrayBuffer,
         });
       } else if (file.name.endsWith('.epub') || file.type === 'application/epub+zip') {
         const { extractEpubText, collectEpubFootnotes } = await import('../utils/epub.js');

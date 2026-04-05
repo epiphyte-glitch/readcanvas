@@ -9,13 +9,14 @@
  */
 
 const DB_NAME = 'readcanvas';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   documents: 'documents',
   workspaces: 'workspaces',
   history: 'history',
   meta: 'meta',
+  files: 'files',       // raw PDF/binary storage
 };
 
 let dbPromise = null;
@@ -46,6 +47,11 @@ function openDb() {
 
       if (!db.objectStoreNames.contains(STORES.meta)) {
         db.createObjectStore(STORES.meta, { keyPath: 'key' });
+      }
+
+      // v2: raw file storage (ArrayBuffer / Blob)
+      if (!db.objectStoreNames.contains(STORES.files)) {
+        db.createObjectStore(STORES.files, { keyPath: 'documentId' });
       }
     };
 
@@ -95,12 +101,15 @@ export async function deleteDocument(id) {
   const docStore = await tx(STORES.documents, 'readwrite');
   await reqToPromise(docStore.delete(id));
 
-  // Also clean up workspace and history
+  // Also clean up workspace, history, and raw file
   const wsStore = await tx(STORES.workspaces, 'readwrite');
   await reqToPromise(wsStore.delete(id));
 
   const hStore = await tx(STORES.history, 'readwrite');
   await reqToPromise(hStore.delete(id));
+
+  const fStore = await tx(STORES.files, 'readwrite');
+  await reqToPromise(fStore.delete(id));
 }
 
 // ─── Workspace operations (nodes, connections, view) ────────────
@@ -165,6 +174,24 @@ export function makeDocumentId(filename, textLength) {
     hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0;
   }
   return `doc_${Math.abs(hash).toString(36)}`;
+}
+
+// ─── Raw file operations ────────────────────────────────────────
+
+export async function saveFile(documentId, arrayBuffer) {
+  const store = await tx(STORES.files, 'readwrite');
+  return reqToPromise(store.put({ documentId, data: arrayBuffer, updatedAt: Date.now() }));
+}
+
+export async function getFile(documentId) {
+  const store = await tx(STORES.files);
+  const record = await reqToPromise(store.get(documentId));
+  return record?.data ?? null;
+}
+
+export async function deleteFile(documentId) {
+  const store = await tx(STORES.files, 'readwrite');
+  return reqToPromise(store.delete(documentId));
 }
 
 /**

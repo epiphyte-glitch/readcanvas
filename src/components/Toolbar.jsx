@@ -39,6 +39,8 @@ export default function Toolbar({
   onToggleHistory,
   onBackToLibrary,
   onResetView,
+  onExtractText,
+  extracting,
   annotationMode,
   connectingMode,
   showHistory,
@@ -83,6 +85,14 @@ export default function Toolbar({
       {/* Actions */}
       <ToolButton onClick={onBackToLibrary} label="Library" icon="←" />
       <ToolButton onClick={onUpload} label="Open File" icon="↑" />
+      {onExtractText && (
+        <ToolButton
+          onClick={onExtractText}
+          label={extracting ? 'Extracting…' : 'Extract Text'}
+          icon="≡"
+          active={extracting}
+        />
+      )}
       <ToolButton onClick={onAddNote} label={annotationMode ? 'Cancel' : 'Add Note'} icon="✎" active={annotationMode} />
       <ToolButton onClick={onAddImage} label="Add Image" icon="◻" />
       <ToolButton onClick={onLinkNodes} label={connectingMode ? 'Cancel' : 'Link'} icon="⟶" active={connectingMode} />
