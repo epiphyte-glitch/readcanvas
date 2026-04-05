@@ -1,6 +1,28 @@
 import React, { useState } from 'react';
 import { colors, fonts } from '../styles/tokens';
 
+function ZoomButton({ onClick, label }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: 24, height: 24,
+        background: hover ? colors.buttonHover : colors.buttonBg,
+        border: 'none', borderRadius: 4,
+        color: colors.uiText, cursor: 'pointer',
+        fontFamily: fonts.sans, fontSize: 14, fontWeight: 500,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function ToolButton({ onClick, label, icon, active, danger }) {
   const [hover, setHover] = useState(false);
   return (
@@ -39,6 +61,8 @@ export default function Toolbar({
   onToggleHistory,
   onBackToLibrary,
   onResetView,
+  onZoomIn,
+  onZoomOut,
   onExtractText,
   extracting,
   annotationMode,
@@ -159,16 +183,21 @@ export default function Toolbar({
       {/* Right side */}
       <ToolButton onClick={onToggleHistory} label="History" icon="↺" active={showHistory} />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-        <span style={{ color: colors.uiTextDim, fontFamily: fonts.sans, fontSize: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
+        <ZoomButton onClick={onZoomOut} label="−" />
+        <span style={{
+          color: colors.uiTextDim, fontFamily: fonts.mono, fontSize: 11,
+          minWidth: 38, textAlign: 'center',
+        }}>
           {Math.round(zoom * 100)}%
         </span>
+        <ZoomButton onClick={onZoomIn} label="+" />
         <button
           onClick={onResetView}
           style={{
             background: colors.buttonBg, border: 'none', borderRadius: 4,
             color: colors.uiTextDim, padding: '3px 8px', cursor: 'pointer',
-            fontFamily: fonts.sans, fontSize: 11,
+            fontFamily: fonts.sans, fontSize: 11, marginLeft: 2,
           }}
         >
           Reset

@@ -10,11 +10,17 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
  * Quickly read page count from a PDF without full extraction.
  * Returns { totalPages, arrayBuffer } — the buffer is reused for rendering.
  */
-export async function getPdfPageCount(file) {
+export async function getPdfPageCount(file, onProgress) {
   const arrayBuffer = await file.arrayBuffer();
   // Pass a *copy* to pdf.js — getDocument transfers the buffer to the worker,
   // detaching the original. We keep the original for storage.
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) }).promise;
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
+  if (onProgress) {
+    loadingTask.onProgress = ({ loaded, total }) => {
+      if (total > 0) onProgress({ loaded, total });
+    };
+  }
+  const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
   await pdf.destroy();
   return { totalPages, arrayBuffer };

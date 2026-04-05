@@ -12,6 +12,7 @@ export default function PdfViewerCard({ node, currentPage, totalPages, onPageCha
   const pdfDocRef = useRef(null);
   const renderTaskRef = useRef(null);
   const [rendering, setRendering] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);   // 0-100, null = fully loaded
   const [error, setError] = useState(null);
 
   const cardWidth = node.width || 720;
@@ -22,6 +23,7 @@ export default function PdfViewerCard({ node, currentPage, totalPages, onPageCha
     if (!node.pdfData) return;
 
     let cancelled = false;
+    setLoadProgress(0);
 
     const load = async () => {
       try {
@@ -29,10 +31,18 @@ export default function PdfViewerCard({ node, currentPage, totalPages, onPageCha
           await pdfDocRef.current.destroy();
           pdfDocRef.current = null;
         }
+
         // Slice to pass a copy — pdf.js transfers the buffer to its worker,
         // which would detach the original stored in React state.
-        const doc = await pdfjsLib.getDocument({ data: new Uint8Array(node.pdfData.slice(0)) }).promise;
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(node.pdfData.slice(0)) });
+
+        loadingTask.onProgress = ({ loaded, total }) => {
+          if (!cancelled && total > 0) setLoadProgress(Math.round((loaded / total) * 100));
+        };
+
+        const doc = await loadingTask.promise;
         if (cancelled) { doc.destroy(); return; }
+        setLoadProgress(null); // signal fully loaded
         pdfDocRef.current = doc;
         renderPage(doc, currentPage);
       } catch (err) {
@@ -111,9 +121,6 @@ export default function PdfViewerCard({ node, currentPage, totalPages, onPageCha
       <div
         onMouseDown={onMouseDown}
         style={{
-          height: 36,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px',
           background: colors.bg,
           borderBottom: `1px solid ${colors.gridDot}`,
           cursor: 'grab',
@@ -121,17 +128,38 @@ export default function PdfViewerCard({ node, currentPage, totalPages, onPageCha
           flexShrink: 0,
         }}
       >
-        <span style={{
-          fontFamily: fonts.sans, fontSize: 10, fontWeight: 600,
-          color: colors.uiTextDim, textTransform: 'uppercase', letterSpacing: '0.1em',
+        <div style={{
+          height: 36,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px',
         }}>
-          {node.filename || 'PDF'}
-        </span>
-        <span style={{
-          fontFamily: fonts.mono, fontSize: 10, color: colors.uiTextDim,
-        }}>
-          {rendering ? 'Rendering…' : `${currentPage} / ${totalPages}`}
-        </span>
+          <span style={{
+            fontFamily: fonts.sans, fontSize: 10, fontWeight: 600,
+            color: colors.uiTextDim, textTransform: 'uppercase', letterSpacing: '0.1em',
+          }}>
+            {node.filename || 'PDF'}
+          </span>
+          <span style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.uiTextDim }}>
+            {loadProgress !== null
+              ? `Loading ${loadProgress}%`
+              : rendering
+              ? 'Rendering…'
+              : `${currentPage} / ${totalPages}`}
+          </span>
+        </div>
+
+        {/* Progress bar — visible while loading or rendering */}
+        {(loadProgress !== null || rendering) && (
+          <div style={{ height: 2, background: colors.gridDot }}>
+            <div style={{
+              height: '100%',
+              width: loadProgress !== null ? `${loadProgress}%` : '100%',
+              background: colors.accent,
+              transition: loadProgress !== null ? 'width 0.2s' : 'none',
+              opacity: rendering ? 0.5 : 1,
+            }} />
+          </div>
+        )}
       </div>
 
       {/* Canvas area */}

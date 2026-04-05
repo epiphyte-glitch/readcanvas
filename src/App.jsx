@@ -421,12 +421,16 @@ export default function App() {
   }, [loadDocument]);
 
   // ─── Canvas mouse handlers ────────────────────────────────────
+  const INTERACTIVE = new Set(['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'A']);
   const handleCanvasMouseDown = (e) => {
     if (annotationMode) {
       handleCanvasClick(e);
       return;
     }
-    if (e.target === canvasRef.current || e.target.dataset?.canvas) {
+    // Pan whenever the event reaches here and the target isn't a button/input.
+    // Node headers call e.stopPropagation() so they never reach this handler.
+    // Everything else (card bodies, empty canvas, PDF page area) should pan.
+    if (!INTERACTIVE.has(e.target.tagName)) {
       canvas.startPan(e);
     }
   };
@@ -478,6 +482,8 @@ export default function App() {
         onToggleHistory={() => setShowHistory(!showHistory)}
         onBackToLibrary={() => setView('library')}
         onResetView={canvas.resetView}
+        onZoomIn={() => canvas.setZoom(z => Math.min(3, +(z * 1.15).toFixed(3)))}
+        onZoomOut={() => canvas.setZoom(z => Math.max(0.15, +(z / 1.15).toFixed(3)))}
         onExtractText={pdfData ? handleExtractText : null}
         extracting={extracting}
         annotationMode={annotationMode}

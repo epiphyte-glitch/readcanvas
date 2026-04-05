@@ -27,7 +27,9 @@ export default function UploadModal({ onClose, onFileLoaded, file: initialFile }
       if (file.type === 'application/pdf') {
         // Just read page count — text extraction happens on demand via toolbar
         const { getPdfPageCount } = await import('../utils/pdf.js');
-        const { totalPages, arrayBuffer } = await getPdfPageCount(file);
+        const { totalPages, arrayBuffer } = await getPdfPageCount(file, ({ loaded, total }) => {
+          setProgress({ current: Math.round((loaded / total) * 100), total: 100, mode: 'load' });
+        });
 
         onFileLoaded({
           filename: file.name,
@@ -146,7 +148,7 @@ export default function UploadModal({ onClose, onFileLoaded, file: initialFile }
                 fontFamily: fonts.sans, fontSize: 14, fontWeight: 500,
                 color: colors.accent, marginBottom: 8,
               }}>
-                Extracting text...
+                {progress?.mode === 'load' ? 'Loading PDF…' : 'Extracting text…'}
               </div>
               {progress && (
                 <div>
@@ -155,15 +157,17 @@ export default function UploadModal({ onClose, onFileLoaded, file: initialFile }
                     borderRadius: 2, overflow: 'hidden', marginBottom: 6,
                   }}>
                     <div style={{
-                      width: `${(progress.current / progress.total) * 100}%`,
+                      width: `${progress.mode === 'load'
+                        ? progress.current
+                        : (progress.current / progress.total) * 100}%`,
                       height: '100%', background: colors.accent,
                       borderRadius: 2, transition: 'width 0.3s',
                     }} />
                   </div>
-                  <span style={{
-                    fontFamily: fonts.mono, fontSize: 11, color: colors.inkLight,
-                  }}>
-                    Page {progress.current} of {progress.total}
+                  <span style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.inkLight }}>
+                    {progress.mode === 'load'
+                      ? `${progress.current}%`
+                      : `Page ${progress.current} of ${progress.total}`}
                   </span>
                 </div>
               )}
